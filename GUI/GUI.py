@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog
 from PIL import Image, ImageDraw, ImageOps, ImageTk, ImageChops, ImageEnhance
 import numpy as np
 import cv2
@@ -7,6 +7,7 @@ from keras.models import load_model
 import time
 import threading
 import os
+from queue import Empty, Queue
 
 # ====== CONFIG ======
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -81,18 +82,7 @@ def extract_digits_from_pil(img_pil, min_area=MIN_CONTOUR_AREA, separate_touchin
 
     contours, _ = cv2.findContours(thr.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        h, w = thr.shape
-        side = max(h, w)
-        canvas_big = np.zeros((side, side), dtype=np.uint8)
-        ly = (side - h) // 2
-        lx = (side - w) // 2
-        canvas_big[ly:ly + h, lx:lx + w] = thr
-        resized = cv2.resize(canvas_big, (20, 20), interpolation=cv2.INTER_AREA)
-        canvas = np.zeros((28, 28), dtype=np.uint8)
-        canvas[4:24, 4:24] = resized
-        canvas = deskew(canvas)
-        canvas = center_image(canvas)
-        return [canvas]
+        return []
 
     filtered = []
     contours = sorted(contours, key=lambda c: cv2.boundingRect(c)[0])
@@ -111,8 +101,19 @@ def extract_digits_from_pil(img_pil, min_area=MIN_CONTOUR_AREA, separate_touchin
         filtered.append(proc)
 
     if not filtered:
-        return extract_digits_from_pil(img_pil, min_area=0, separate_touching=False)
+        return []
     return filtered
+
+
+def centered_roi(frame, roi_size):
+    """Return a copy of the centered square ROI and its display coordinates."""
+    height, width = frame.shape[:2]
+    size = min(roi_size, height, width)
+    x1 = (width - size) // 2
+    y1 = (height - size) // 2
+    x2 = x1 + size
+    y2 = y1 + size
+    return frame[y1:y2, x1:x2].copy(), (x1, y1, x2, y2)
 
 
 class DigitRecognizer:
@@ -172,6 +173,9 @@ class DigitRecognizer:
         self.cap = None
         self.last_cam_pred = 0
         self.after_id = None
+        self.camera_image_id = None
+        self.prediction_in_progress = False
+        self.prediction_results = Queue()
 
         # Для автоматичного розпізнавання після паузи малювання
         self.last_paint_time = 0
@@ -196,12 +200,14 @@ class DigitRecognizer:
         if self.camera_on:
             return  # Заборонити змінювати пензель під час камери
         delta = 0
-        if hasattr(event, 'delta'):
-            delta = event.delta
-        elif event.num == 4:
+        if getattr(event, "num", None) == 4:
             delta = 120
-        elif event.num == 5:
+        elif getattr(event, "num", None) == 5:
             delta = -120
+        else:
+            delta = getattr(event, "delta", 0)
+        if delta == 0:
+            return
         if delta > 0:
             self.brush_radius = min(50, self.brush_radius + 1)
         else:
@@ -212,25 +218,28 @@ class DigitRecognizer:
         if self.camera_on:
             return  # Не можна чистити, поки камера ввімкнена
         self.canvas.delete("all")
+        self.camera_image_id = None
         self.draw.rectangle([0, 0, CANVAS_SIZE, CANVAS_SIZE], fill=255)
         self.result_label.config(text="Draw digits or choose source")
 
-    def predict_from_image(self, img_pil, camera_mode=False):
+    def recognition_text(self, img_pil):
         digits = extract_digits_from_pil(img_pil)
         if not digits:
-            self.result_label.config(text="No digits found")
-            return
+            return "No digits found"
         preds = []
         confs = []
         for d in digits:
-            pil_img = Image.fromarray(d)  # Конвертуємо numpy у PIL Image
-            lab, conf = self.tta_predict(pil_img, camera_mode=camera_mode)
+            pil_img = Image.fromarray(d)
+            lab, conf = self.tta_predict(pil_img)
             preds.append(str(lab))
             confs.append(conf)
         result_str = "".join(preds)
         avg_conf = float(np.mean(confs))
         per = ", ".join([f"{p}:{c:.0f}%" for p, c in zip(preds, confs)])
-        self.result_label.config(text=f"Result: {result_str}   (avg {avg_conf:.1f}%)  [{per}]")
+        return f"Result: {result_str}   (avg {avg_conf:.1f}%)  [{per}]"
+
+    def predict_from_image(self, img_pil):
+        self.result_label.config(text=self.recognition_text(img_pil))
 
     def load_image(self):
         if self.camera_on:
@@ -238,9 +247,9 @@ class DigitRecognizer:
         p = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
         if not p:
             return
-        img = Image.open(p)
-        img = ImageOps.grayscale(img)
-        self.predict_from_image(img, camera_mode=False)
+        with Image.open(p) as source:
+            img = ImageOps.grayscale(source)
+            self.predict_from_image(img)
 
     def toggle_camera(self):
         if not self.camera_on:
@@ -252,6 +261,7 @@ class DigitRecognizer:
                 return
             self.camera_btn.config(text="Camera ON", bg="#27ae60")
             self.last_cam_pred = 0
+            self.camera_image_id = None
             self.update_camera()
         else:
             self.camera_on = False
@@ -280,18 +290,18 @@ class DigitRecognizer:
             return
         ret, frame = self.cap.read()
         if ret:
-            h, w, _ = frame.shape
-            x1, y1 = max(0, w // 2 - ROI_SIZE // 2), max(0, h // 2 - ROI_SIZE // 2)
-            x2, y2 = min(w, x1 + ROI_SIZE), min(h, y1 + ROI_SIZE)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 0), 2)
-
-            roi = frame[y1:y2, x1:x2]
+            roi, (x1, y1, x2, y2) = centered_roi(frame, ROI_SIZE)
             gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
             pil = Image.fromarray(gray)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 0), 2)
 
             now = int(time.time() * 1000)
-            if now - self.last_cam_pred >= CAMERA_PRED_INTERVAL:
-                threading.Thread(target=self.safe_predict, args=(pil,)).start()
+            if (now - self.last_cam_pred >= CAMERA_PRED_INTERVAL
+                    and not self.prediction_in_progress):
+                self.prediction_in_progress = True
+                threading.Thread(
+                    target=self.safe_predict, args=(pil,), daemon=True
+                ).start()
                 self.last_cam_pred = now
 
             # Показуємо відео безпосередньо на canvas
@@ -299,17 +309,33 @@ class DigitRecognizer:
             img_pil = Image.fromarray(img_rgb)
             img_pil = img_pil.resize((CANVAS_SIZE, CANVAS_SIZE))
             self.photo_image = ImageTk.PhotoImage(img_pil)
-            self.canvas.create_image(0, 0, anchor=tk.NW, image=self.photo_image)
+            if self.camera_image_id is None:
+                self.camera_image_id = self.canvas.create_image(
+                    0, 0, anchor=tk.NW, image=self.photo_image
+                )
+            else:
+                self.canvas.itemconfig(self.camera_image_id, image=self.photo_image)
+
+        self.show_prediction_result()
 
         self.after_id = self.root.after(40, self.update_camera)
 
     def safe_predict(self, pil_img):
         try:
-            self.predict_from_image(pil_img, camera_mode=True)
+            self.prediction_results.put(self.recognition_text(pil_img))
         except Exception as e:
-            print("Prediction error:", e)
+            self.prediction_results.put(f"Prediction error: {e}")
+        finally:
+            self.prediction_in_progress = False
 
-    def tta_predict(self, img, camera_mode=False):
+    def show_prediction_result(self):
+        try:
+            text = self.prediction_results.get_nowait()
+        except Empty:
+            return
+        self.result_label.config(text=text)
+
+    def tta_predict(self, img):
         if isinstance(img, np.ndarray):
             img = Image.fromarray(img)
 
@@ -335,11 +361,6 @@ class DigitRecognizer:
         for angle in [-10, -5, 5, 10]:
             rotated = img.rotate(angle, fillcolor=0)
             variants.append(rotated)
-
-        flipped_h = ImageOps.mirror(img)
-        flipped_v = ImageOps.flip(img)
-        variants.append(flipped_h)
-        variants.append(flipped_v)
 
         enhancer = ImageEnhance.Contrast(img)
         variants.append(enhancer.enhance(0.9))
