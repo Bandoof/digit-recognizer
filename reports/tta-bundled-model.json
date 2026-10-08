@@ -1,0 +1,36 @@
+{
+  "legacy17": {
+    "accuracy": 0.995,
+    "median_ms_per_digit": 46.14633484599926,
+    "ms_per_digit_runs": [
+      46.14633484599926
+    ],
+    "views": 17
+  },
+  "fast": {
+    "accuracy": 0.995,
+    "median_ms_per_digit": 5.097187975000452,
+    "ms_per_digit_runs": [
+      5.097187975000452
+    ],
+    "views": 5
+  },
+  "none": {
+    "accuracy": 0.994,
+    "median_ms_per_digit": 4.41915390000031,
+    "ms_per_digit_runs": [
+      4.41915390000031
+    ],
+    "views": 1
+  },
+  "fast_vs_legacy_accuracy_delta_pp": 0.0,
+  "fast_vs_legacy_speedup": 9.053292731664497,
+  "samples": 1000,
+  "repeats": 1,
+  "seed": 42,
+  "partition": "validation (10% stratified split of official MNIST training data)",
+  "input": "original 28x28 MNIST images, no GUI preprocessing",
+  "timing": "serial single-digit calls including augmentation; warmed model; median of repeats",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "model_sha256": "d8bdc88af96588a657624ac5f7e16831d75ac5cfe017b75c12dcfde7a87b5ec9"
+}

@@ -1,4 +1,9 @@
-tensorflow>=2.15,<2.16
-numpy>=1.23.5,<2
-Pillow>=10,<11
-opencv-python>=4.8,<5
+# Python 3.10–3.11; Keras 2 is required by the bundled HDF5 model.
+tensorflow==2.15.1
+keras==2.15.0
+numpy==1.26.4
+pillow==11.3.0
+opencv-python==4.11.0.86
+scipy==1.15.3
+matplotlib==3.10.3
+scikit-learn==1.6.1

@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["gui: needs a Tk display (use xvfb-run on Linux)"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
