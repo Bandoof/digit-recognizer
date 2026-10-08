@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageOps, ImageTk, UnidentifiedImageError
 from .workers import CameraStream, PredictionWorker
 
 LOGGER = logging.getLogger(__name__)
-MODEL_PATH = Path(__file__).resolve().parents[1] / "Model" / "mnist.h5"
+MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "mnist.h5"
 CANVAS_SIZE = 480
 AUTO_RECOGNIZE_DELAY = 1.5
 CAMERA_PRED_INTERVAL = 1.0

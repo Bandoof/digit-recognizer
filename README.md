@@ -23,13 +23,6 @@ python -m digit_recognizer.gui
 
 Tkinter and a graphical desktop are required. On Ubuntu/Debian, install `python3-tk` and `libgl1` if absent. Some Python distributions require their own Tk package. The app runs on CPU; CUDA is optional. Grant webcam permissions to Python/your terminal and close other applications holding the camera.
 
-The original commands still work:
-
-```bash
-python GUI/GUI.py
-python -m pip install -r requirements.txt.txt
-```
-
 To choose a camera, model, or disable TTA:
 
 ```bash
@@ -37,7 +30,7 @@ python -m digit_recognizer.gui --camera-index 1 --tta none
 python -m digit_recognizer.gui --model artifacts/mnist-seed42/model.keras
 ```
 
-The default is the original `Model/mnist.h5`, which is preserved. The newly measured results below belong to a separately trained model, **not** to this bundled legacy checkpoint. A newly trained checkpoint is stored in the chosen output directory; it is not committed automatically.
+The default is the bundled `models/mnist.h5`. The newly measured results below belong to a separately trained model, **not** to this legacy checkpoint. A newly trained checkpoint is stored in the chosen output directory; it is not committed automatically.
 
 ## CNN architecture
 
@@ -62,8 +55,6 @@ Training uses Adam and categorical cross-entropy. Augmentation applies small rot
 
 ```bash
 python -m digit_recognizer.training --output-dir artifacts/mnist-seed42 --epochs 5 --seed 42
-# Compatibility entry point:
-python "Train Model/train_digit_recognizer.py" --output-dir artifacts/another-run
 ```
 
 Keras downloads MNIST from `storage.googleapis.com` on first use. For offline or restricted environments, supply a local standard MNIST archive:
@@ -181,9 +172,7 @@ digit_recognizer/
   gui.py              Tkinter application
   training.py         Split, train, select, evaluate, and plot
   benchmark.py        Reproducible validation-only TTA comparison
-GUI/GUI.py            Original GUI entry point
-Train Model/          Original training entry point
-Model/mnist.h5        Original pretrained checkpoint (preserved)
+models/mnist.h5        Bundled pretrained checkpoint
 tests/                Unit and integration tests
 reports/              Measured results and plots
 artifacts/            Local run outputs (ignored by Git)

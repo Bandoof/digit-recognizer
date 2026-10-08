@@ -1,2 +1,0 @@
-# Compatibility with the original installation command.
--r requirements.txt
